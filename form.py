@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QHBoxLayout,
                              QButtonGroup, QRadioButton)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSlot
+from c import FFParam
 
 
 class App(QDialog):
@@ -29,7 +30,7 @@ class App(QDialog):
         fileList = QListWidget()
         leftLayout.addWidget(fileList)
         fileList.currentItemChanged.connect(self.on_SelectFileChange)
-        self.lstFile = fileList
+        self.fileList = fileList
 
         btnAdd = QPushButton("添加")
         btnAdd.clicked.connect(self.on_btnAdd)
@@ -78,18 +79,27 @@ class App(QDialog):
         vg.setCheckable(True)
 
         vl = QFormLayout()
-        self.vEncoder = QComboBox()
-        self.vEncoder.addItem("copy")
-        self.vEncoder.addItem("libx264")
-        self.vEncoder.addItem("libx265")
-        vl.addRow("视频编码", self.vEncoder)
+        self.vcodec = QComboBox()
+        self.vcodec.addItem("copy")
+        self.vcodec.addItem("libx264")
+        self.vcodec.addItem("libx265")
+        vl.addRow("视频编码", self.vcodec)
 
         self.vResolution = QLineEdit()
         vl.addRow("分辨率", self.vResolution)
 
-        self.vCrf = QLineEdit()
-        vl.addRow("CRF", self.vCrf)
+        self.vFrameRate = QLineEdit()
+        vl.addRow("帧率", self.vFrameRate)
+
+        self.crf = QLineEdit()
+        vl.addRow("CRF", self.crf)
+
+        self.vkbps = QComboBox()
+        vkb = ["设置后会覆盖crf", "750", "1000", "1500", "2000", "3000"]
+        self.vkbps.addItems(vkb)
+        vl.addRow("比特率kbps", self.vkbps)
         vg.setLayout(vl)
+        self.vGroup = vg
         return vg
 
     def createAudioGroup(self):
@@ -110,6 +120,7 @@ class App(QDialog):
         self.aStream = QLineEdit()
         al.addRow("音频流", self.aStream)
         ag.setLayout(al)
+        self.aGroup = ag
         return ag
 
     def createSubtitleGroup(self):
@@ -120,18 +131,24 @@ class App(QDialog):
         sl.addWidget(self.sFile, 0, 0)
         self.sStream = QRadioButton("字幕流")
         sl.addWidget(self.sStream, 1, 0)
-        sFileInfo = QLineEdit()
-        sFileInfo.setText("视频路径.ass")
-        sFileInfo.setReadOnly(True)
+        sFileInfo = QLabel("与视频同路径同名")
         sl.addWidget(sFileInfo, 0, 1)
         self.sStreamNum = QLineEdit()
         sl.addWidget(self.sStreamNum, 1, 1)
+
+        self.sFormat = QComboBox()
+        self.sFormat.addItem("srt")
+        self.sFormat.addItem("ass")
+        self.sFormat.addItem("pgs")
+        sl.addWidget(QLabel("字幕格式"), 2, 0)
+        sl.addWidget(self.sFormat, 2, 1)
 
         self.sBtnGroup = QButtonGroup()
         self.sBtnGroup.addButton(self.sFile)
         self.sBtnGroup.addButton(self.sStream)
         self.sBtnGroup.buttonToggled.connect(self.on_SwitchSub)
         sg.setLayout(sl)
+        self.sGroup = sg
         return sg
 
     def createOtherGroup(self):
@@ -146,12 +163,18 @@ class App(QDialog):
         self.timeEnd = QLineEdit()
         ol.addRow("结束", self.timeEnd)
         og.setLayout(ol)
+
+        self.outFormat = QComboBox()
+        formats = ["", "mp4", "avi", "aac", "gif"]
+        self.outFormat.addItems(formats)
+        ol.addRow("输出格式", self.outFormat)
+        self.oGroup = og
         return og
 
     def on_btnAdd(self):
         ss = QFileDialog.getOpenFileName()
         print(type(ss))
-        self.lstFile.addItem(ss[0])
+        self.fileList.addItem(ss[0])
         print("add")
 
     def on_SelectFileChange(self, cur, prev):
@@ -159,19 +182,55 @@ class App(QDialog):
             print(cur.text())
 
     def on_Ok(self):
-        cur = self.lstFile.currentItem()
+        cur = self.fileList.currentItem()
         if cur:
             info = cur.text()
         else:
             info = "默认配置"
         QMessageBox.information(
             self, "OK", info + " 配置已保存", QMessageBox.Yes)
+        print(self.toFFparam().cmds())
+
+    def getWH(self):
+        w, h = 0, 0
+        text = self.vResolution.text()
+        if not text:
+            return (w,h)
+        try:
+            import re
+            s = re.split("[^0-9]", text)
+            w, h = map(int, s)
+        except Exception as e:
+            print(e)
+        print(w, h)
+        return (w, h)
+
+    def toFFparam(self):
+        ff = FFParam()
+        ff.v = self.vGroup.isChecked()
+        ff.vcodec = self.vcodec.currentText()
+        ff.w, ff.h = self.getWH()
+        ff.nframe = int(self.vFrameRate.text() or 0)
+        ff.crf = int(self.crf.text() or 0)
+        ff.vkbps = int(self.vkbps.currentText() if
+            self.vkbps.currentIndex() != 0 else "0")
+
+        ff.a = self.aGroup.isChecked()
+        ff.astream = int(self.aStream.text() or 0)
+        ff.acodec = self.aEncoder.currentText()
+        ff.akbps = int(self.aBitRate.text() or 0)
+        ff.ar = int(self.aSampRate.text() or 0)
+
+        ff.s = self.sGroup.isChecked()
+        ff.sstream = 
+
+        return ff
 
     def on_useDefaultState(self, state):
         print(state)
 
     def on_EditDefault(self):
-        self.lstFile.setCurrentRow(-1)
+        self.fileList.setCurrentRow(-1)
         print("edit")
 
     def on_Help(self):
@@ -179,6 +238,7 @@ class App(QDialog):
 
     def on_SwitchSub(self, obj, checked):
         print(obj.text(), checked)
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
