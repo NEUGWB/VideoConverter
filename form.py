@@ -2,9 +2,9 @@ import sys
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QHBoxLayout,
                              QGroupBox, QDialog, QVBoxLayout, QGridLayout, QListWidget, QFileDialog,
                              QTextEdit, QLabel, QFormLayout, QLineEdit, QComboBox, QCheckBox, QMessageBox,
-                             QButtonGroup, QRadioButton)
+                             QButtonGroup, QRadioButton, QListWidgetItem)
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtCore import  Qt
 from c import FFParam
 
 
@@ -13,6 +13,7 @@ class App(QDialog):
         super().__init__()
 
         self.initUI()
+        self.defParam = FFParam()
 
     def initUI(self):
         self.setWindowTitle("格式转换")
@@ -106,15 +107,16 @@ class App(QDialog):
         ag = QGroupBox("音频")
         ag.setCheckable(True)
         al = QFormLayout()
-        self.aEncoder = QComboBox()
-        self.aEncoder.addItem("copy")
-        self.aEncoder.addItem("aac")
-        al.addRow("音频编码", self.aEncoder)
+        self.acodec = QComboBox()
+        self.acodec.addItems(["copy", "aac"])
+        al.addRow("音频编码", self.acodec)
 
-        self.aBitRate = QLineEdit()
+        self.aBitRate = QComboBox()
+        self.aBitRate.addItems(["96", "128", "192", "320"])
         al.addRow("比特率kbps", self.aBitRate)
 
-        self.aSampRate = QLineEdit()
+        self.aSampRate = QComboBox()
+        self.aSampRate.addItems(["44100", "48000"])
         al.addRow("采样率", self.aSampRate)
 
         self.aStream = QLineEdit()
@@ -126,6 +128,7 @@ class App(QDialog):
     def createSubtitleGroup(self):
         sg = QGroupBox("字幕")
         sg.setCheckable(True)
+        sg.setChecked(False)
         sl = QGridLayout()
         self.sFile = QRadioButton("字幕文件")
         sl.addWidget(self.sFile, 0, 0)
@@ -137,15 +140,14 @@ class App(QDialog):
         sl.addWidget(self.sStreamNum, 1, 1)
 
         self.sFormat = QComboBox()
-        self.sFormat.addItem("srt")
-        self.sFormat.addItem("ass")
-        self.sFormat.addItem("pgs")
+        self.sFormat.addItems(["srt", "ass", "pgs"])
         sl.addWidget(QLabel("字幕格式"), 2, 0)
         sl.addWidget(self.sFormat, 2, 1)
 
         self.sBtnGroup = QButtonGroup()
         self.sBtnGroup.addButton(self.sFile)
         self.sBtnGroup.addButton(self.sStream)
+        self.sFile.setChecked(True)
         self.sBtnGroup.buttonToggled.connect(self.on_SwitchSub)
         sg.setLayout(sl)
         self.sGroup = sg
@@ -160,8 +162,8 @@ class App(QDialog):
         self.timeStart = QLineEdit()
         ol.addRow("开始", self.timeStart)
 
-        self.timeEnd = QLineEdit()
-        ol.addRow("结束", self.timeEnd)
+        self.timeSpan = QLineEdit()
+        ol.addRow("时长", self.timeSpan)
         og.setLayout(ol)
 
         self.outFormat = QComboBox()
@@ -174,28 +176,36 @@ class App(QDialog):
     def on_btnAdd(self):
         ss = QFileDialog.getOpenFileName()
         print(type(ss))
-        self.fileList.addItem(ss[0])
+        item = QListWidgetItem()
+        self.fileList.addItem(item)
+        item.setText(ss[0])
+        item.setData(Qt.UserRole, FFParam())
+        print(ss[0])
         print("add")
 
     def on_SelectFileChange(self, cur, prev):
         if cur:
-            print(cur.text())
+            ff = cur.data(Qt.UserRole)
+        else:
+            ff = self.defParam
+        if ff:
+            self.fromFFparam(ff)
 
     def on_Ok(self):
         cur = self.fileList.currentItem()
+        ff = self.toFFparam()
         if cur:
-            info = cur.text()
+            cur.setData(Qt.UserRole, ff)
         else:
-            info = "默认配置"
-        QMessageBox.information(
-            self, "OK", info + " 配置已保存", QMessageBox.Yes)
-        print(self.toFFparam().cmds())
+            self.defParam = ff
+        for s in ff.cmds():
+            print(s)
 
     def getWH(self):
         w, h = 0, 0
         text = self.vResolution.text()
         if not text:
-            return (w,h)
+            return (w, h)
         try:
             import re
             s = re.split("[^0-9]", text)
@@ -207,24 +217,75 @@ class App(QDialog):
 
     def toFFparam(self):
         ff = FFParam()
+        ff.infile = "in.mp4"
         ff.v = self.vGroup.isChecked()
         ff.vcodec = self.vcodec.currentText()
         ff.w, ff.h = self.getWH()
         ff.nframe = int(self.vFrameRate.text() or 0)
         ff.crf = int(self.crf.text() or 0)
         ff.vkbps = int(self.vkbps.currentText() if
-            self.vkbps.currentIndex() != 0 else "0")
+                       self.vkbps.currentIndex() != 0 else "0")
 
         ff.a = self.aGroup.isChecked()
         ff.astream = int(self.aStream.text() or 0)
-        ff.acodec = self.aEncoder.currentText()
-        ff.akbps = int(self.aBitRate.text() or 0)
-        ff.ar = int(self.aSampRate.text() or 0)
+        ff.acodec = self.acodec.currentText()
+        ff.akbps = int(self.aBitRate.currentText() or 0)
+        ff.ar = int(self.aSampRate.currentText() or 0)
 
         ff.s = self.sGroup.isChecked()
-        ff.sstream = 
+        if self.sFile.isChecked():
+            ff.sfile = True
+            ff.sstream = -1
+        elif self.sStream.isChecked():
+            ff.sstream = int(self.sStreamNum.text() or 0)
+            ff.sfile = ""
+        ff.sformat = self.sFormat.currentText()
+
+        ff.clip = self.oGroup.isChecked()
+        ff.ss = self.timeStart.text()
+        ff.t = self.timeSpan.text()
+        ff.outformat = self.outFormat.currentText()
 
         return ff
+
+    def fromFFparam(self, ff):
+        self.vGroup.setChecked(ff.v)
+        vcodecIndex = self.vcodec.findText(ff.vcodec)
+        if vcodecIndex < 0:
+            vcodecIndex = 0
+        self.vcodec.setCurrentIndex(vcodecIndex)
+
+        if ff.w > 0 and ff.h > 0:
+            self.vResolution.setText("{0}*{1}".format(ff.w, ff.h))
+        else:
+            self.vResolution.setText("")
+
+        if ff.nframe > 0:
+            self.vFrameRate.setText(str(ff.nframe))
+        else:
+            self.vFrameRate.setText("")
+
+        vkbpsIndex = self.vkbps.findText(str(ff.vkbps))
+        if vkbpsIndex > 0:
+            self.vkbps.setCurrentIndex(vkbpsIndex)
+        else:
+            self.vkbps.setCurrentIndex(0)
+
+        self.aGroup.setChecked(ff.a)
+        acodecIndex = self.vcodec.findText(ff.acodec)
+        if acodecIndex < 0:
+            acodecIndex = 0
+        self.acodec.setCurrentIndex(acodecIndex)
+        if ff.astream >= 0:
+            self.aStream.setText(str(ff.astream))
+        else:
+            self.aStream.setText("")
+        arIndex = self.aSampRate.findText(str(ff.ar))
+        arIndex = arIndex if arIndex >= 0 else 0
+        self.aSampRate.setCurrentIndex(arIndex)
+        akbpsIndex = self.aBitRate.findText(str(ff.akbps))
+        akbpsIndex = akbpsIndex if akbpsIndex >= 0 else 0
+        self.aBitRate.setCurrentIndex(akbpsIndex)
 
     def on_useDefaultState(self, state):
         print(state)
@@ -232,6 +293,7 @@ class App(QDialog):
     def on_EditDefault(self):
         self.fileList.setCurrentRow(-1)
         print("edit")
+        self.fromFFparam(self.defParam)
 
     def on_Help(self):
         print("help")

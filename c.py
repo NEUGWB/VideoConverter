@@ -8,7 +8,7 @@ import uuid
 
 class FFParam:
     def __init__(self):
-        self.uuid = uuid.uuid1()
+        self.uuid = str(uuid.uuid1())
         self.infile = ""
 
         self.v = True
@@ -37,7 +37,7 @@ class FFParam:
 
     def cmds(self):
         sscmd = ""
-        cmd = "ffmpeg " + self.infile + " "
+        cmd = "ffmpeg -i " + self.infile + " "
         if self.v:
             if self.vcodec:
                 cmd += "-c:v {0} ".format(self.vcodec)
@@ -67,13 +67,15 @@ class FFParam:
                 sscmd = "ffmpeg -i {0} -map 0:s:{1} {2} ".format(
                         self.infile, self.sstream, subfile)
             elif self.sfile:
+                fn, ext = os.path.splitext(self.infile)
+                fn += "." + self.sformat
                 cpcmd = "copy /y " if platform.system == "Windows" else "cp -f "
-                sscmd = "{0} {1} {2} ".format(cpcmd, self.sfile, subfile)
+                sscmd = "{0} {1} {2} ".format(cpcmd, fn, subfile)
 
             if self.sformat == "ass":
                 cmd += "-vf ass={0} ".format(subfile)
             elif self.sformat == "srt":
-                cmd += "-vf \"subtitles={0}:force_style=\'Fontsize=22\'\" ".format(
+                cmd += "-vf \"subtitles={0}:force_style='Fontsize=22'\" ".format(
                     subfile)
             elif self.sformat == "pgs":
                 cmd += "-filter_complex \"[0:v][0:s:{0}]overlay[v]\" -map \"[v]\" ".format(
@@ -83,6 +85,16 @@ class FFParam:
                 cmd += "-ss " + self.ss + ' '
             if self.t:
                 cmd += "-t " + self.t + ' '
+
+        if not self.outformat:
+            if self.v:
+                self.outformat = "mp4"
+            elif self.a:
+                self.outformat = self.acodec
+        cmd += "-f " + self.outformat + " "
+        path, fname = os.path.split(self.infile)
+        fname, ext = os.path.splitext(fname)
+        cmd += fname + "_out." + self.outformat
 
         return (sscmd, cmd)
 
