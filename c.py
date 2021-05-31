@@ -8,7 +8,7 @@ import uuid
 
 class FFParam:
     def __init__(self):
-        self.uuid = str(uuid.uuid1())
+        self.uuid = str(uuid.uuid1())[:8]
         self.infile = ""
 
         self.v = True
@@ -24,7 +24,7 @@ class FFParam:
         self.akbps = 0
         self.ar = 0
         self.ac = 0
-        self.astream = 0
+        self.astream = -1
 
         self.s = False
         self.sstream = -1
@@ -37,7 +37,7 @@ class FFParam:
 
     def cmds(self):
         sscmd = ""
-        cmd = "ffmpeg -i " + self.infile + " "
+        cmd = "ffmpeg -y -i \"" + self.infile + "\" "
         if self.v:
             if self.vcodec:
                 cmd += "-c:v {0} ".format(self.vcodec)
@@ -53,7 +53,7 @@ class FFParam:
             if self.acodec:
                 cmd += "-c:a {0} ".format(self.acodec)
             if self.astream >= 0:
-                cmd += "-map 0:a:{0} ".format(self.astream)
+                cmd += "-map 0:a:{0} -map 0:v:0 ".format(self.astream)
             if self.akbps > 0:
                 cmd += "-b:a {0}k ".format(self.akbps)
             if self.ar > 0:
@@ -64,7 +64,7 @@ class FFParam:
         if self.s:
             subfile = self.uuid + "." + self.sformat
             if self.sstream >= 0 and self.sformat != 'pgs':
-                sscmd = "ffmpeg -i {0} -map 0:s:{1} {2} ".format(
+                sscmd = "ffmpeg -y -i \"{0}\" -map 0:s:{1} {2} ".format(
                         self.infile, self.sstream, subfile)
             elif self.sfile:
                 fn, ext = os.path.splitext(self.infile)
@@ -92,11 +92,27 @@ class FFParam:
             elif self.a:
                 self.outformat = self.acodec
         cmd += "-f " + self.outformat + " "
+        
+
+
         path, fname = os.path.split(self.infile)
         fname, ext = os.path.splitext(fname)
-        cmd += fname + "_out." + self.outformat
+        output_name = '"' + fname + "_out." + self.outformat + '"'
 
-        return (sscmd, cmd)
+        if self.vkbps > 0:
+            sysstr = platform.system()
+            if sysstr == "Windows":
+                nullfile = "NUL"
+            else:
+                nullfile = "/dev/null"
+            passlog_name = self.uuid
+            pass1_cmd = cmd + " -pass 1 -passlogfile {0} {1} ".format(passlog_name, nullfile)
+            pass2_cmd = cmd + " -pass 2 -passlogfile {0} {1} ".format(passlog_name, output_name)
+            ret = [sscmd, pass1_cmd, pass2_cmd]
+        else:
+            cmd += output_name
+            ret = [sscmd, cmd]
+        return [s for s in ret if s]
 
 
 def run():
@@ -108,9 +124,9 @@ def run():
         nullfile = "/dev/null"
 
     p1_cmd = ff_cmd + \
-        " -pass 1 -passlogfile {0} -f mp4 {1}".format(passlog_name, nullfile)
+        " -pass 1 -passlogfile {0} {1}".format(passlog_name, nullfile)
     p2_cmd = ff_cmd + \
-        " -pass 2 -passlogfile {0} -f mp4 {1}".format(
+        " -pass 2 -passlogfile {0} {1}".format(
             passlog_name, output_name)
 
     cmd = p1_cmd + "\n" + p2_cmd
@@ -121,7 +137,7 @@ def run():
     os.system(p2_cmd)
 
     try:
-        os.rename(output_name, filename+"out.mp4")
+        os.rename(output_name, filename+"out.mkv")
         os.remove(subtitle_name)
         os.remove(passlog_name+"-0.log")
         os.remove(passlog_name+"-0.log.mbtree")

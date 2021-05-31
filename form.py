@@ -1,4 +1,4 @@
-import sys
+import sys, os
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QHBoxLayout,
                              QGroupBox, QDialog, QVBoxLayout, QGridLayout, QListWidget, QFileDialog,
                              QTextEdit, QLabel, QFormLayout, QLineEdit, QComboBox, QCheckBox, QMessageBox,
@@ -140,7 +140,7 @@ class App(QDialog):
         sl.addWidget(self.sStreamNum, 1, 1)
 
         self.sFormat = QComboBox()
-        self.sFormat.addItems(["srt", "ass", "pgs"])
+        self.sFormat.addItems(["ass", "pgs"])
         sl.addWidget(QLabel("字幕格式"), 2, 0)
         sl.addWidget(self.sFormat, 2, 1)
 
@@ -174,32 +174,37 @@ class App(QDialog):
         return og
 
     def on_btnAdd(self):
-        ss = QFileDialog.getOpenFileName()
-        print(type(ss))
-        item = QListWidgetItem()
-        self.fileList.addItem(item)
-        item.setText(ss[0])
-        item.setData(Qt.UserRole, FFParam())
-        print(ss[0])
+        ss = QFileDialog.getOpenFileNames()[0]
+        for fs in ss:
+            item = QListWidgetItem()
+            self.fileList.addItem(item)
+            path, fname = os.path.split(fs)
+            item.setText(fname)
+            item.setData(Qt.UserRole, fs)
+            item.setToolTip(fs)
+            print(fs)
         print("add")
 
     def on_SelectFileChange(self, cur, prev):
-        if cur:
-            ff = cur.data(Qt.UserRole)
-        else:
-            ff = self.defParam
+        ff = self.defParam
         if ff:
             self.fromFFparam(ff)
 
     def on_Ok(self):
+        self.mediaInfo.clear()
         cur = self.fileList.currentItem()
         ff = self.toFFparam()
         if cur:
-            cur.setData(Qt.UserRole, ff)
+            ff.infile = cur.data(Qt.UserRole)
         else:
-            self.defParam = ff
+            ff.infile = "<input-file>"
+        self.defParam = ff
+        
         for s in ff.cmds():
+            if not s:
+                continue
             print(s)
+            self.mediaInfo.append(s)
 
     def getWH(self):
         w, h = 0, 0
@@ -217,7 +222,7 @@ class App(QDialog):
 
     def toFFparam(self):
         ff = FFParam()
-        ff.infile = "in.mp4"
+        ff.infile = "<input-file>"
         ff.v = self.vGroup.isChecked()
         ff.vcodec = self.vcodec.currentText()
         ff.w, ff.h = self.getWH()
@@ -296,7 +301,18 @@ class App(QDialog):
         self.fromFFparam(self.defParam)
 
     def on_Help(self):
-        print("help")
+        self.mediaInfo.clear()
+        self.defParam = self.toFFparam()
+        
+        for i in range(0, self.fileList.count()):
+            cur = self.fileList.item(i)
+            ff = self.defParam
+            ff.infile = cur.data(Qt.UserRole)
+            for s in ff.cmds():
+                if not s:
+                    continue
+                print(s)
+                self.mediaInfo.append(s)
 
     def on_SwitchSub(self, obj, checked):
         print(obj.text(), checked)
