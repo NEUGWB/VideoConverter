@@ -81,9 +81,9 @@ class App(QDialog):
 
         vl = QFormLayout()
         self.vcodec = QComboBox()
-        self.vcodec.addItem("copy")
         self.vcodec.addItem("libx264")
         self.vcodec.addItem("libx265")
+        self.vcodec.addItem("copy")
         vl.addRow("视频编码", self.vcodec)
 
         self.vResolution = QLineEdit()
@@ -108,7 +108,7 @@ class App(QDialog):
         ag.setCheckable(True)
         al = QFormLayout()
         self.acodec = QComboBox()
-        self.acodec.addItems(["copy", "aac"])
+        self.acodec.addItems(["aac", "copy"])
         al.addRow("音频编码", self.acodec)
 
         self.aBitRate = QComboBox()

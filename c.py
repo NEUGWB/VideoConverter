@@ -37,7 +37,8 @@ class FFParam:
 
     def cmds(self):
         sscmd = ""
-        cmd = "ffmpeg -y -i \"" + self.infile + "\" "
+        in_file = os.path.normpath(self.infile)
+        cmd = "ffmpeg -y -i \"" + in_file + "\" "
         if self.v:
             if self.vcodec:
                 cmd += "-c:v {0} ".format(self.vcodec)
@@ -65,12 +66,12 @@ class FFParam:
             subfile = self.uuid + "." + self.sformat
             if self.sstream >= 0 and self.sformat != 'pgs':
                 sscmd = "ffmpeg -y -i \"{0}\" -map 0:s:{1} {2} ".format(
-                        self.infile, self.sstream, subfile)
+                        in_file, self.sstream, subfile)
             elif self.sfile:
-                fn, ext = os.path.splitext(self.infile)
+                fn, ext = os.path.splitext(in_file)
                 fn += "." + self.sformat
-                cpcmd = "copy /y " if platform.system == "Windows" else "cp -f "
-                sscmd = "{0} {1} {2} ".format(cpcmd, fn, subfile)
+                cpcmd = "copy /y " if platform.system() == "Windows" else "cp -f "
+                sscmd = "{0} \"{1}\" \"{2}\" ".format(cpcmd, os.path.normpath(fn), subfile)
 
             if self.sformat == "ass":
                 cmd += "-vf ass={0} ".format(subfile)
@@ -97,7 +98,7 @@ class FFParam:
 
         path, fname = os.path.split(self.infile)
         fname, ext = os.path.splitext(fname)
-        output_name = '"' + fname + "_out." + self.outformat + '"'
+        out_file = os.path.normpath(fname + "_out." + self.outformat)
 
         if self.vkbps > 0:
             sysstr = platform.system()
@@ -107,10 +108,10 @@ class FFParam:
                 nullfile = "/dev/null"
             passlog_name = self.uuid
             pass1_cmd = cmd + " -pass 1 -passlogfile {0} {1} ".format(passlog_name, nullfile)
-            pass2_cmd = cmd + " -pass 2 -passlogfile {0} {1} ".format(passlog_name, output_name)
+            pass2_cmd = cmd + " -pass 2 -passlogfile {0} \"{1}\" ".format(passlog_name, out_file)
             ret = [sscmd, pass1_cmd, pass2_cmd]
         else:
-            cmd += output_name
+            cmd += '"' + out_file + '"'
             ret = [sscmd, cmd]
         return [s for s in ret if s]
 
