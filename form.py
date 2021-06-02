@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, traceback
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QHBoxLayout,
                              QGroupBox, QDialog, QVBoxLayout, QGridLayout, QListWidget, QFileDialog,
                              QTextEdit, QLabel, QFormLayout, QLineEdit, QComboBox, QCheckBox, QMessageBox,
@@ -6,14 +6,18 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QHBoxLayout,
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import  Qt
 from c import FFParam
-
+import conf
 
 class App(QDialog):
     def __init__(self):
         super().__init__()
 
         self.initUI()
-        self.defParam = FFParam()
+        try:
+            conf.load()
+        except Exception as e:
+            print('load error', str(e))
+            traceback.print_exc()
 
     def initUI(self):
         self.setWindowTitle("格式转换")
@@ -25,6 +29,7 @@ class App(QDialog):
         mainLayout.addLayout(ml)
         mainLayout.addLayout(rl)
         self.setLayout(mainLayout)
+        self.on_Help()
 
     def createLeftLayout(self):
         leftLayout = QVBoxLayout()
@@ -51,12 +56,11 @@ class App(QDialog):
     def createMidLayout(self):
         midLayout = QVBoxLayout()
         dl = QHBoxLayout()
-        self.useDefault = QCheckBox("使用默认配置")
-        self.useDefault.stateChanged.connect(self.on_useDefaultState)
-        self.useDefault.setChecked(False)
+        self.useDefault = QPushButton("加载配置")
+        self.useDefault.clicked.connect(self.on_loadConf)
         dl.addWidget(self.useDefault)
-        self.editDefault = QPushButton("编辑默认配置")
-        self.editDefault.clicked.connect(self.on_EditDefault)
+        self.editDefault = QPushButton("保存配置")
+        self.editDefault.clicked.connect(self.on_saveConf)
         dl.addWidget(self.editDefault)
         midLayout.addLayout(dl)
 
@@ -112,7 +116,8 @@ class App(QDialog):
         al.addRow("音频编码", self.acodec)
 
         self.aBitRate = QComboBox()
-        self.aBitRate.addItems(["96", "128", "192", "320"])
+        self.aBitRate.addItems(["128", "192", "320"])
+        self.aBitRate.setCurrentIndex(1)
         al.addRow("比特率kbps", self.aBitRate)
 
         self.aSampRate = QComboBox()
@@ -174,7 +179,8 @@ class App(QDialog):
         return og
 
     def on_btnAdd(self):
-        ss = QFileDialog.getOpenFileNames()[0]
+        ss = QFileDialog.getOpenFileNames(directory=conf.get_path())[0]
+        path = ''
         for fs in ss:
             item = QListWidgetItem()
             self.fileList.addItem(item)
@@ -183,56 +189,41 @@ class App(QDialog):
             item.setData(Qt.UserRole, fs)
             item.setToolTip(fs)
             print(fs)
-        print("add")
+        if path:
+            conf.set_path(path)
 
     def on_SelectFileChange(self, cur, prev):
-        ff = self.defParam
-        if ff:
-            self.fromFFparam(ff)
+        pass
 
     def on_Ok(self):
         self.mediaInfo.clear()
-        cur = self.fileList.currentItem()
         ff = self.toFFparam()
-        if cur:
-            ff.infile = cur.data(Qt.UserRole)
-        else:
-            ff.infile = "<input-file>"
-        self.defParam = ff
         
-        for s in ff.cmds():
-            if not s:
-                continue
-            print(s)
-            self.mediaInfo.append(s)
-
-    def getWH(self):
-        w, h = 0, 0
-        text = self.vResolution.text()
-        if not text:
-            return (w, h)
-        try:
-            import re
-            s = re.split("[^0-9]", text)
-            w, h = map(int, s)
-        except Exception as e:
-            print(e)
-        print(w, h)
-        return (w, h)
+        infiles = []
+        for i in range(0, self.fileList.count()):
+            cur = self.fileList.item(i)
+            infiles.append(cur.data(Qt.UserRole))
+        if not infiles:
+            infiles.append("<in-file>")
+        for infile in infiles:
+            for s in ff.cmds(infile):
+                print(s)
+                self.mediaInfo.append(s)
+            self.mediaInfo.append('\n')
 
     def toFFparam(self):
         ff = FFParam()
         ff.infile = "<input-file>"
         ff.v = self.vGroup.isChecked()
         ff.vcodec = self.vcodec.currentText()
-        ff.w, ff.h = self.getWH()
-        ff.nframe = int(self.vFrameRate.text() or 0)
-        ff.crf = int(self.crf.text() or 0)
+        ff.resolution = self.vResolution.text()
+        ff.nframe = int(self.vFrameRate.text() or -1)
+        ff.crf = int(self.crf.text() or -1)
         ff.vkbps = int(self.vkbps.currentText() if
                        self.vkbps.currentIndex() != 0 else "0")
 
         ff.a = self.aGroup.isChecked()
-        ff.astream = int(self.aStream.text() or 0)
+        ff.astream = int(self.aStream.text() or -1)
         ff.acodec = self.acodec.currentText()
         ff.akbps = int(self.aBitRate.currentText() or 0)
         ff.ar = int(self.aSampRate.currentText() or 0)
@@ -260,15 +251,15 @@ class App(QDialog):
             vcodecIndex = 0
         self.vcodec.setCurrentIndex(vcodecIndex)
 
-        if ff.w > 0 and ff.h > 0:
-            self.vResolution.setText("{0}*{1}".format(ff.w, ff.h))
-        else:
-            self.vResolution.setText("")
+        if ff.resolution:
+            self.vResolution.setText(ff.resolution)
 
         if ff.nframe > 0:
             self.vFrameRate.setText(str(ff.nframe))
         else:
             self.vFrameRate.setText("")
+        if ff.crf > 0:
+            self.crf.setText(str(ff.crf))
 
         vkbpsIndex = self.vkbps.findText(str(ff.vkbps))
         if vkbpsIndex > 0:
@@ -292,31 +283,28 @@ class App(QDialog):
         akbpsIndex = akbpsIndex if akbpsIndex >= 0 else 0
         self.aBitRate.setCurrentIndex(akbpsIndex)
 
-    def on_useDefaultState(self, state):
-        print(state)
+    def on_loadConf(self):
+        self.fromFFparam(conf.get_ff())
 
-    def on_EditDefault(self):
-        self.fileList.setCurrentRow(-1)
-        print("edit")
-        self.fromFFparam(self.defParam)
+    def on_saveConf(self):
+        conf.set_ff(self.toFFparam())
+        conf.save()
 
     def on_Help(self):
-        self.mediaInfo.clear()
-        self.defParam = self.toFFparam()
-        
-        for i in range(0, self.fileList.count()):
-            cur = self.fileList.item(i)
-            ff = self.defParam
-            ff.infile = cur.data(Qt.UserRole)
-            for s in ff.cmds():
-                if not s:
-                    continue
-                print(s)
-                self.mediaInfo.append(s)
+        self.mediaInfo.setText(tips)
 
     def on_SwitchSub(self, obj, checked):
         print(obj.text(), checked)
 
+tips = '''
+·把界面转化成ffmpeg命令
+·点确定之后在这里会显示命令，自己粘贴到sh或bat里执行
+·分辨率写法：1280x720，1280:720，-2:720，1280:-2，iw*0.5:wh:0.5
+·字幕格式自己去看文件后缀名，或者ffmpeg -i查看
+·设置视频比特率会采用2-pass压缩，crf无效
+
+·不保证正确，但是不会删你的文件（理论上）
+'''
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

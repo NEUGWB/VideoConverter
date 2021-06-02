@@ -8,13 +8,9 @@ import uuid
 
 class FFParam:
     def __init__(self):
-        self.uuid = str(uuid.uuid1())[:8]
-        self.infile = ""
-
         self.v = True
         self.vcodec = ""
-        self.w = -1
-        self.h = -1
+        self.resolution = ""
         self.nframe = -1
         self.crf = -1
         self.vkbps = -1
@@ -35,15 +31,20 @@ class FFParam:
         self.ss = ""
         self.t = ""
 
-    def cmds(self):
-        sscmd = ""
-        in_file = os.path.normpath(self.infile)
+    def cmds(self, infile):
+        ffuuid = str(uuid.uuid1())[:8]
+        vfstrs = []
+        ret = []
+        in_file = os.path.normpath(infile)
         cmd = "ffmpeg -y -i \"" + in_file + "\" "
         if self.v:
             if self.vcodec:
                 cmd += "-c:v {0} ".format(self.vcodec)
-            if self.w > 0 and self.h > 0:
-                cmd += "-s {0}x{1} ".format(self.w, self.h)
+            if self.resolution:
+                if ':' in self.resolution:
+                    vfstrs.append("scale="+self.resolution)
+                elif 'x' in self.resolution:
+                    cmd += "-s " + self.resolution + " "
             if self.nframe > 1:
                 cmd += "-r {0} ".format(self.nframe)
             if self.vkbps > 0:
@@ -63,21 +64,25 @@ class FFParam:
                 cmd += "-ac {0} ".format(self.ac)
 
         if self.s:
-            subfile = self.uuid + "." + self.sformat
+            subfile = ffuuid + "." + self.sformat
             if self.sstream >= 0 and self.sformat != 'pgs':
                 sscmd = "ffmpeg -y -i \"{0}\" -map 0:s:{1} {2} ".format(
                         in_file, self.sstream, subfile)
+                ret.append(sscmd)
+                if self.sformat == 'srt':
+                    sscmd1 = "ffmpeg -y -i \"{0}\".srt \"{0}\".ass".format(ffuuid)
+                    ret.append(sscmd1)
+                
             elif self.sfile:
                 fn, ext = os.path.splitext(in_file)
                 fn += "." + self.sformat
                 cpcmd = "copy /y " if platform.system() == "Windows" else "cp -f "
                 sscmd = "{0} \"{1}\" \"{2}\" ".format(cpcmd, os.path.normpath(fn), subfile)
+                ret.append(sscmd)
 
-            if self.sformat == "ass":
-                cmd += "-vf ass={0} ".format(subfile)
-            elif self.sformat == "srt":
-                cmd += "-vf \"subtitles={0}:force_style='Fontsize=22'\" ".format(
-                    subfile)
+            if self.sformat in ['ass', 'srt']:      # has convert srt to ass
+                vfstrs.append("ass={0} ".format(subfile))
+                #cmd += "-vf ass={0} ".format(subfile)
             elif self.sformat == "pgs":
                 cmd += "-filter_complex \"[0:v][0:s:{0}]overlay[v]\" -map \"[v]\" ".format(
                     self.sstream)
@@ -93,10 +98,10 @@ class FFParam:
             elif self.a:
                 self.outformat = self.acodec
         cmd += "-f " + self.outformat + " "
-        
+        if vfstrs:
+            cmd += "-vf \"{0}\" ".format(", ".join(vfstrs))
 
-
-        path, fname = os.path.split(self.infile)
+        path, fname = os.path.split(infile)
         fname, ext = os.path.splitext(fname)
         out_file = os.path.normpath(fname + "_out." + self.outformat)
 
@@ -106,15 +111,14 @@ class FFParam:
                 nullfile = "NUL"
             else:
                 nullfile = "/dev/null"
-            passlog_name = self.uuid
+            passlog_name = ffuuid
             pass1_cmd = cmd + " -pass 1 -passlogfile {0} {1} ".format(passlog_name, nullfile)
             pass2_cmd = cmd + " -pass 2 -passlogfile {0} \"{1}\" ".format(passlog_name, out_file)
-            ret = [sscmd, pass1_cmd, pass2_cmd]
+            ret.extend([pass1_cmd, pass2_cmd])
         else:
             cmd += '"' + out_file + '"'
-            ret = [sscmd, cmd]
+            ret.append(cmd)
         return [s for s in ret if s]
-
 
 def run():
 
