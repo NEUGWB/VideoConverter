@@ -1,7 +1,5 @@
 import os
-import sys
 import uuid
-import shutil
 import platform
 import uuid
 
@@ -24,12 +22,13 @@ class FFParam:
 
         self.s = False
         self.sstream = -1
-        self.sfile = ""
+        self.sfile = False
         self.sformat = "ass"
 
         self.clip = False
         self.ss = ""
         self.t = ""
+        self.infile = ""
 
     def cmds(self, infile):
         ffuuid = str(uuid.uuid1())[:8]
@@ -42,7 +41,7 @@ class FFParam:
                 cmd += "-c:v {0} ".format(self.vcodec)
             if self.resolution:
                 if ':' in self.resolution:
-                    vfstrs.append("scale="+self.resolution)
+                    vfstrs.append("scale=" + self.resolution)
                 elif 'x' in self.resolution:
                     cmd += "-s " + self.resolution + " "
             if self.nframe > 1:
@@ -70,22 +69,23 @@ class FFParam:
                         in_file, self.sstream, subfile)
                 ret.append(sscmd)
                 if self.sformat == 'srt':
-                    sscmd1 = "ffmpeg -y -i \"{0}\".srt \"{0}\".ass".format(ffuuid)
+                    sscmd1 = "ffmpeg -y -i \"{0}\".srt \"{0}\".ass".format(
+                        ffuuid)
                     ret.append(sscmd1)
-                
+
             elif self.sfile:
                 fn, ext = os.path.splitext(in_file)
                 fn += "." + self.sformat
                 cpcmd = "copy /y " if platform.system() == "Windows" else "cp -f "
-                sscmd = "{0} \"{1}\" \"{2}\" ".format(cpcmd, os.path.normpath(fn), subfile)
+                sscmd = "{0} \"{1}\" \"{2}\" ".format(
+                    cpcmd, os.path.normpath(fn), subfile)
                 ret.append(sscmd)
 
             if self.sformat in ['ass', 'srt']:      # has convert srt to ass
                 vfstrs.append("ass={0} ".format(subfile))
-                #cmd += "-vf ass={0} ".format(subfile)
+                # cmd += "-vf ass={0} ".format(subfile)
             elif self.sformat == "pgs":
-                cmd += "-filter_complex \"[0:v][0:s:{0}]overlay[v]\" -map \"[v]\" ".format(
-                    self.sstream)
+                cmd += "-filter_complex \"[0:v][0:s:{0}]overlay[v]\" -map \"[v]\" ".format(self.sstream)
         if self.clip:
             if self.ss:
                 cmd += "-ss " + self.ss + ' '
@@ -112,15 +112,24 @@ class FFParam:
             else:
                 nullfile = "/dev/null"
             passlog_name = ffuuid
-            pass1_cmd = cmd + " -pass 1 -passlogfile {0} {1} ".format(passlog_name, nullfile)
-            pass2_cmd = cmd + " -pass 2 -passlogfile {0} \"{1}\" ".format(passlog_name, out_file)
+            pass1_cmd = cmd + \
+                " -pass 1 -passlogfile {0} {1} ".format(passlog_name, nullfile)
+            pass2_cmd = cmd + \
+                " -pass 2 -passlogfile {0} \"{1}\" ".format(
+                    passlog_name, out_file)
             ret.extend([pass1_cmd, pass2_cmd])
         else:
             cmd += '"' + out_file + '"'
             ret.append(cmd)
         return [s for s in ret if s]
 
-def run():
+
+def test():
+    ff_cmd = "ffmpet "
+    passlog_name = "_passlog_"
+    output_name = "_out_"
+    filename = "_in_"
+    subtitle_name = "_sub_"
 
     sysstr = platform.system()
     if sysstr == "Windows":
@@ -131,8 +140,7 @@ def run():
     p1_cmd = ff_cmd + \
         " -pass 1 -passlogfile {0} {1}".format(passlog_name, nullfile)
     p2_cmd = ff_cmd + \
-        " -pass 2 -passlogfile {0} {1}".format(
-            passlog_name, output_name)
+        " -pass 2 -passlogfile {0} {1}".format(passlog_name, output_name)
 
     cmd = p1_cmd + "\n" + p2_cmd
     print('.....')
@@ -142,9 +150,9 @@ def run():
     os.system(p2_cmd)
 
     try:
-        os.rename(output_name, filename+"out.mkv")
+        os.rename(output_name, filename + "out.mkv")
         os.remove(subtitle_name)
-        os.remove(passlog_name+"-0.log")
-        os.remove(passlog_name+"-0.log.mbtree")
+        os.remove(passlog_name + "-0.log")
+        os.remove(passlog_name + "-0.log.mbtree")
     except Exception as e:
         pass

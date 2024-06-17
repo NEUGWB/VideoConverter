@@ -1,12 +1,14 @@
-import sys, os, traceback
-from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QHBoxLayout,
-                             QGroupBox, QDialog, QVBoxLayout, QGridLayout, QListWidget, QFileDialog,
-                             QTextEdit, QLabel, QFormLayout, QLineEdit, QComboBox, QCheckBox, QMessageBox,
-                             QButtonGroup, QRadioButton, QListWidgetItem)
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import  Qt
-from c import FFParam
 import conf
+from c import FFParam
+from PySide6.QtCore import Qt
+import sys
+import os
+import traceback
+
+from PySide6.QtWidgets import (QHBoxLayout, QVBoxLayout, QListWidget, QApplication, QButtonGroup,
+                               QPushButton, QLabel, QTextEdit, QGroupBox, QGridLayout, QRadioButton,
+                               QLineEdit, QDialog, QFormLayout, QComboBox, QFileDialog, QListWidgetItem)
+
 
 class App(QDialog):
     def __init__(self):
@@ -179,14 +181,14 @@ class App(QDialog):
         return og
 
     def on_btnAdd(self):
-        ss = QFileDialog.getOpenFileNames(directory=conf.get_path())[0]
+        ss = QFileDialog.getOpenFileNames(dir=conf.get_path())[0]
         path = ''
         for fs in ss:
             item = QListWidgetItem()
             self.fileList.addItem(item)
             path, fname = os.path.split(fs)
             item.setText(fname)
-            item.setData(Qt.UserRole, fs)
+            item.setData(Qt.ItemDataRole.UserRole, fs)
             item.setToolTip(fs)
             print(fs)
         if path:
@@ -198,11 +200,11 @@ class App(QDialog):
     def on_Ok(self):
         self.mediaInfo.clear()
         ff = self.toFFparam()
-        
+
         infiles = []
         for i in range(0, self.fileList.count()):
             cur = self.fileList.item(i)
-            infiles.append(cur.data(Qt.UserRole))
+            infiles.append(cur.data(Qt.ItemDataRole.UserRole))
         if not infiles:
             infiles.append("<in-file>")
         for infile in infiles:
@@ -234,7 +236,7 @@ class App(QDialog):
             ff.sstream = -1
         elif self.sStream.isChecked():
             ff.sstream = int(self.sStreamNum.text() or 0)
-            ff.sfile = ""
+            ff.sfile = False
         ff.sformat = self.sFormat.currentText()
 
         ff.clip = self.oGroup.isChecked()
@@ -296,6 +298,7 @@ class App(QDialog):
     def on_SwitchSub(self, obj, checked):
         print(obj.text(), checked)
 
+
 tips = '''
 ·把界面转化成ffmpeg命令
 ·点确定之后在这里会显示命令，自己粘贴到sh或bat里执行
@@ -310,4 +313,4 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = App()
     ex.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
